@@ -38,13 +38,45 @@ jobs:
       matrix:
         # a list of all the targets
         include:
+          #- TARGET: i686-unknown-linux-gnu # test in an alpine container on a mac
+          #  OS: ubuntu-latest
+          #  FEATURES: default
+          - TARGET: x86_64-unknown-linux-musl # test in an alpine container on a mac
+            OS: ubuntu-latest
+            FEATURES: default
+          - TARGET: aarch64-unknown-linux-musl # tested on aws t4g.nano in alpine container
+            OS: ubuntu-latest
+            FEATURES: default
+          - TARGET: armv7-unknown-linux-musleabihf # raspberry pi 2-3-4, not tested
+            OS: ubuntu-latest
+            FEATURES: default
+          - TARGET: armv7-unknown-linux-musleabi # raspberry pi 2-3-4, not tested
+            OS: ubuntu-latest
+            FEATURES: default
+          - TARGET: arm-unknown-linux-musleabihf # raspberry pi 0-1, not tested
+            OS: ubuntu-latest
+            FEATURES: default
+          - TARGET: arm-unknown-linux-musleabi # raspberry pi 0-1, not tested
+            OS: ubuntu-latest
+            FEATURES: default
+          - TARGET: x86_64-apple-darwin # tested on a mac, is not properly signed so there are security warnings
+            OS: macos-latest
+            FEATURES: default
+          - TARGET: aarch64-apple-darwin # tested on a mac, is not properly signed so there are security warnings
+            OS: macos-latest
+            FEATURES: default
+          - TARGET: i686-pc-windows-msvc # tested on a windows machine
+            OS: windows-2019
+            FEATURES: default
+          - TARGET: x86_64-pc-windows-msvc # tested on a windows machine
+            OS: windows-latest
+            FEATURES: default
+          - TARGET: mipsel-unknown-linux-musl # openwrt
+            OS: ubuntu-latest
+            FEATURES: default
           - TARGET: mips-unknown-linux-musl # openwrt
             OS: ubuntu-latest
             FEATURES: default
-          - TARGET: x86_64-unknown-freebsd
-            OS: ubuntu-latest
-            ARTIFACT_NAME: freebsd-13.2-x86_64
-            BSD_VERSION: 13.2
     # needs: test
     runs-on: ${{ matrix.OS }}
     env:
@@ -66,46 +98,24 @@ jobs:
       - name: Use strawberry perl
         if: startsWith(matrix.os, 'windows')
         run: echo OPENSSL_SRC_PERL=C:/Strawberry/perl/bin/perl >> $GITHUB_ENV
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - name: Update submodule 
+        run: git submodule update --remote
       - name: List
         run: find ./
-            # Copied and slightly modified from @lmq8267 (https://github.com/lmq8267)
-      - name: Build Core & Cli (X86_64 FreeBSD)
-        uses: cross-platform-actions/action@v0.23.0
-        if: ${{ endsWith(matrix.TARGET, 'freebsd') }}
-        env:
-          TARGET: ${{ matrix.TARGET }}
-        with:
-          operating_system: freebsd
-          environment_variables: TARGET
-          architecture: x86-64
-          version: ${{ matrix.BSD_VERSION }}
-          shell: bash
-          memory: 5G
-          cpu_count: 4
-          run: |
-            uname -a
-            echo $SHELL
-            pwd
-            ls -lah
-            whoami
-            env | sort
-
-            sudo pkg install -y git protobuf
-            curl --proto 'https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-            source $HOME/.cargo/env
-
-            rustup set auto-self-update disable
-
-            rustup install 1.77
-            rustup default 1.77
-
-            export CC=clang
-            export CXX=clang++
-            export CARGO_TERM_COLOR=always
-
-            cargo build --release --verbose --target $TARGET
+      - name: Build web
+        run: |
+          cd web-app
+          npm install --save-dev vite
+          npm run build
+          find ./
+          cd ..
+          mkdir static
+          cp -r ./web-app/dist/* ./static/
       - name: Install and configure dependencies
-        if: ${{ ! endsWith(matrix.TARGET, 'freebsd') }}
         run: |
           # dependencies are only needed on ubuntu as that's the only place where
           # we make cross-compilation
