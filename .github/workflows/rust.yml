@@ -38,45 +38,13 @@ jobs:
       matrix:
         # a list of all the targets
         include:
-          #- TARGET: i686-unknown-linux-gnu # test in an alpine container on a mac
-          #  OS: ubuntu-latest
-          #  FEATURES: default
-          - TARGET: x86_64-unknown-linux-musl # test in an alpine container on a mac
-            OS: ubuntu-latest
-            FEATURES: default
-          - TARGET: aarch64-unknown-linux-musl # tested on aws t4g.nano in alpine container
-            OS: ubuntu-latest
-            FEATURES: default
-          - TARGET: armv7-unknown-linux-musleabihf # raspberry pi 2-3-4, not tested
-            OS: ubuntu-latest
-            FEATURES: default
-          - TARGET: armv7-unknown-linux-musleabi # raspberry pi 2-3-4, not tested
-            OS: ubuntu-latest
-            FEATURES: default
-          - TARGET: arm-unknown-linux-musleabihf # raspberry pi 0-1, not tested
-            OS: ubuntu-latest
-            FEATURES: default
-          - TARGET: arm-unknown-linux-musleabi # raspberry pi 0-1, not tested
-            OS: ubuntu-latest
-            FEATURES: default
-          - TARGET: x86_64-apple-darwin # tested on a mac, is not properly signed so there are security warnings
-            OS: macos-latest
-            FEATURES: default
-          - TARGET: aarch64-apple-darwin # tested on a mac, is not properly signed so there are security warnings
-            OS: macos-latest
-            FEATURES: default
-          - TARGET: i686-pc-windows-msvc # tested on a windows machine
-            OS: windows-2019
-            FEATURES: default
-          - TARGET: x86_64-pc-windows-msvc # tested on a windows machine
-            OS: windows-latest
-            FEATURES: default
-          - TARGET: mipsel-unknown-linux-musl # openwrt
-            OS: ubuntu-latest
-            FEATURES: default
           - TARGET: mips-unknown-linux-musl # openwrt
             OS: ubuntu-latest
             FEATURES: default
+          - TARGET: x86_64-unknown-freebsd
+            OS: ubuntu-latest
+            ARTIFACT_NAME: freebsd-13.2-x86_64
+            BSD_VERSION: 13.2
     # needs: test
     runs-on: ${{ matrix.OS }}
     env:
@@ -98,17 +66,46 @@ jobs:
       - name: Use strawberry perl
         if: startsWith(matrix.os, 'windows')
         run: echo OPENSSL_SRC_PERL=C:/Strawberry/perl/bin/perl >> $GITHUB_ENV
-      - name: Build web
-        run: |
-          cd web-app
-          npm install
-          npm run build
-          cd ..
-          rm -rf ./static/*
-          cp -r ./web-app/dist/* ./static/
       - name: List
         run: find ./
+            # Copied and slightly modified from @lmq8267 (https://github.com/lmq8267)
+      - name: Build Core & Cli (X86_64 FreeBSD)
+        uses: cross-platform-actions/action@v0.23.0
+        if: ${{ endsWith(matrix.TARGET, 'freebsd') }}
+        env:
+          TARGET: ${{ matrix.TARGET }}
+        with:
+          operating_system: freebsd
+          environment_variables: TARGET
+          architecture: x86-64
+          version: ${{ matrix.BSD_VERSION }}
+          shell: bash
+          memory: 5G
+          cpu_count: 4
+          run: |
+            uname -a
+            echo $SHELL
+            pwd
+            ls -lah
+            whoami
+            env | sort
+
+            sudo pkg install -y git protobuf
+            curl --proto 'https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            source $HOME/.cargo/env
+
+            rustup set auto-self-update disable
+
+            rustup install 1.77
+            rustup default 1.77
+
+            export CC=clang
+            export CXX=clang++
+            export CARGO_TERM_COLOR=always
+
+            cargo build --release --verbose --target $TARGET
       - name: Install and configure dependencies
+        if: ${{ ! endsWith(matrix.TARGET, 'freebsd') }}
         run: |
           # dependencies are only needed on ubuntu as that's the only place where
           # we make cross-compilation
@@ -163,40 +160,40 @@ jobs:
           # some additional configuration for cross-compilation on linux
           cat >>~/.cargo/config.toml <<EOF
           [target.x86_64-unknown-linux-musl]
-          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols","-C","link-dead-code"]
+          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols"]
           [target.aarch64-unknown-linux-musl]
           linker = "aarch64-linux-musl-gcc"
-          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols","-C","link-dead-code"]
+          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols"]
           [target.armv7-unknown-linux-musleabihf]
           linker = "armv7l-linux-musleabihf-gcc"
-          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols","-C","link-dead-code"]
+          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols"]
           [target.armv7-unknown-linux-musleabi]
           linker = "armv7m-linux-musleabi-gcc"
-          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols","-C","link-dead-code"]
+          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols"]
           [target.arm-unknown-linux-musleabihf]
           linker = "arm-linux-musleabihf-gcc"
-          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols","-C","link-dead-code"]   
+          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols"]   
           [target.arm-unknown-linux-musleabi]
           linker = "arm-linux-musleabi-gcc"
-          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols","-C","link-dead-code"]
+          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols"]
           [target.mipsel-unknown-linux-musl]
           linker = "mipsel-linux-musl-gcc"
-          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols","-C","link-dead-code"]
+          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols"]
           [target.mips-unknown-linux-musl]
           linker = "mips-linux-musl-gcc"
-          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols","-C","link-dead-code"]
+          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols"]
           [target.x86_64-pc-windows-msvc]
-          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols","-C","link-dead-code"]    
+          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols"]    
           [target.i686-pc-windows-msvc]
-          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols","-C","link-dead-code"]      
+          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols"]      
           [target.x86_64-apple-darwin]
-          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols","-C","link-dead-code"] 
+          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols"] 
           [target.aarch64-apple-darwin]
-          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols","-C","link-dead-code"]     
+          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols"]     
           [target.i686-unknown-linux-musl]
-          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols","-C","link-dead-code"]    
+          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols"]    
           [target.i686-unknown-linux-gnu]
-          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols","-C","link-dead-code"]   
+          rustflags = ["-C", "target-feature=+crt-static","-C", "strip=symbols"]   
           EOF
       - name: Install rust target
         run: rustup target add $TARGET
@@ -209,19 +206,19 @@ jobs:
           mkdir -p ./artifacts
           # windows is the only OS using a different convention for executable file name
           if [[ $OS =~ ^windows.*$ ]]; then
-              EXEC_NETLINK=net_link.exe
-              NETLINK=netlink.exe
+              EXEC_NetLink=net_link.exe
+              netLink=netLink.exe
           else
-              EXEC_NETLINK=net_link
-              NETLINK=netlink
+              EXEC_NetLink=net_link
+              netLink=netLink
           fi
           if [[ $GITHUB_REF_TYPE =~ ^tag$ ]]; then
             TAG=$GITHUB_REF_NAME
           else
             TAG=$GITHUB_SHA
           fi
-          mv ./target/$TARGET/release/$EXEC_NETLINK ./$NETLINK
-          tar -czf ./artifacts/netlink-$TARGET-$TAG.tar.gz ./$NETLINK
+          mv ./target/$TARGET/release/$EXEC_NetLink ./$netLink
+          tar -czf ./artifacts/NetLink-$TARGET-$TAG.tar.gz ./$netLink
       - name: List target NetLink
         run: find ./artifacts
       - name: Archive artifact
