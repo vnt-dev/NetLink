@@ -46,6 +46,9 @@ jobs:
             ARTIFACT_NAME: freebsd-13.2-x86_64
             FEATURES: default
             BSD_VERSION: 13.2
+          - TARGET: aarch64-pc-windows-msvc
+            OS: windows-latest
+            FEATURES: default
     # needs: test
     runs-on: ${{ matrix.OS }}
     env:
